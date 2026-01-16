@@ -1,1 +1,2 @@
 # ragMVP
+# tradingalgo
