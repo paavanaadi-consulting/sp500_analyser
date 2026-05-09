@@ -11,7 +11,8 @@ FINVIZ_ELITE_BASE = "https://elite.finviz.com"
 
 LOOKBACK_DAYS = 10
 
-OUTPUT_DIR = "output"
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_DIR = os.path.join(os.path.dirname(PROJECT_DIR), "sp500_output")
 
 # Polygon free tier: 5 calls/min
 POLYGON_DELAY = 12.5
