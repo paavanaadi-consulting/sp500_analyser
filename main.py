@@ -16,6 +16,7 @@ Usage:
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import config
@@ -31,6 +32,19 @@ def load_cached(filename: str) -> list[dict]:
         with open(path) as f:
             return json.load(f)
     return []
+
+
+def write_cowork_pipeline_ready(output_dir: str, summary: dict) -> None:
+    """Signal host tooling (e.g. Cursor agent LaunchAgent) that fresh coworker JSON is available."""
+    out = Path(output_dir)
+    marker = out / ".cowork_pipeline_ready.json"
+    payload = {
+        "finished_at": datetime.now(timezone.utc).isoformat(),
+        "total_stocks_analyzed": summary.get("metadata", {}).get("total_stocks_analyzed"),
+        "coworker_summary_file": "coworker_summary.json",
+    }
+    marker.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    print(f"\nCowork hook: wrote {marker}")
 
 
 def main():
@@ -112,6 +126,9 @@ def main():
         for s in summary["top_emerging_trends"][:10]:
             ret = s['trend'].get('period_return_pct', 'N/A')
             print(f"  {s['ticker']:6s} | Score: {s['trend_score']:5.1f} | {s['sector']:20s} | Return: {ret}%")
+
+    if config.WRITE_COWORK_READY:
+        write_cowork_pipeline_ready(args.output_dir, summary)
 
 
 if __name__ == "__main__":

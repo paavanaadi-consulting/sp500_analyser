@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  After each pipeline run, main.py writes .cowork_pipeline_ready.json under SP500_HOST_DATA_DIR.
+  This LaunchAgent runs trigger-cursor-cowork-agent.sh when that file changes (macOS).
+
+  1. chmod +x .../scripts/trigger-cursor-cowork-agent.sh
+  2. Replace YOUR_USERNAME and paths (must match SP500_HOST_DATA_DIR in .env).
+  3. cp to ~/Library/LaunchAgents/com.sp500-analyser.cowork-ready.plist
+  4. launchctl load ~/Library/LaunchAgents/com.sp500-analyser.cowork-ready.plist
+
+  Requires Cursor CLI: https://cursor.com/docs/cli/using (`agent` on PATH).
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.sp500-analyser.cowork-ready</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/YOUR_USERNAME/Desktop/studyrepos/tradingproject/sp500_analyser/scripts/trigger-cursor-cowork-agent.sh</string>
+  </array>
+  <key>WatchPaths</key>
+  <array>
+    <string>/Users/YOUR_USERNAME/Desktop/studyrepos/tradingproject/sp500_output/.cowork_pipeline_ready.json</string>
+  </array>
+  <key>ThrottleInterval</key>
+  <integer>60</integer>
+  <key>StandardOutPath</key>
+  <string>/tmp/sp500-cowork-agent.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/sp500-cowork-agent.err</string>
+</dict>
+</plist>

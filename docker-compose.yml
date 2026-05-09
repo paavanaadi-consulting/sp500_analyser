@@ -1,0 +1,47 @@
+# SP500 analyser + Ofelia scheduler (Docker Desktop).
+# Weekdays 7:00 America/New_York — same clock as US Eastern (EST/EDT).
+#
+# restart: always — when the Docker engine restarts (Docker Desktop quit/reopened,
+# machine reboot), these containers are started again automatically.
+#
+# Start (from this directory, with .env for API keys):
+#   docker compose up -d --build
+#
+# Logs: docker compose logs -f ofelia
+#        docker logs "$(docker ps -qf name=sp500_ofelia)"  # or inspect Ofelia UI
+
+name: sp500_analyser
+
+services:
+  ofelia:
+    image: mcuadros/ofelia:latest
+    container_name: sp500_ofelia_scheduler
+    restart: always
+    depends_on:
+      pipeline-jobspec:
+        condition: service_started
+    command: daemon --docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      TZ: America/New_York
+
+  # Holds Ofelia labels; stays up so job-exec runs python inside this container (same bind mount as host).
+  pipeline-jobspec:
+    container_name: sp500_pipeline_jobspec
+    build: .
+    image: sp500-analyser:latest
+    restart: always
+    command: ["sleep", "infinity"]
+    environment:
+      POLYGON_API_KEY: ${POLYGON_API_KEY:-}
+      FINVIZ_API_KEY: ${FINVIZ_API_KEY:-}
+      SP500_WRITE_COWORK_READY: "1"
+    volumes:
+      # Host path: pipeline + marker files land here for Cursor Agent / LaunchAgent WatchPaths
+      - ${SP500_HOST_DATA_DIR:-../sp500_output}:/data
+    labels:
+      ofelia.enabled: "true"
+      ofelia.job-exec.daily_sp500.schedule: "0 7 * * 1-5"
+      ofelia.job-exec.daily_sp500.container: "sp500_pipeline_jobspec"
+      ofelia.job-exec.daily_sp500.command: "python main.py --output-dir /data"

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS: bring the compose stack up when you log in and when Docker Desktop creates
+  the engine socket (after quit/restart).
+
+  1. Copy this file to ~/Library/LaunchAgents/com.sp500-analyser.docker.plist
+  2. Replace YOUR_USERNAME with your macOS short username (whoami).
+  3. Replace the script path with the real path to docker-compose-up-when-ready.sh
+  4. chmod +x .../scripts/docker-compose-up-when-ready.sh
+  5: launchctl load ~/Library/LaunchAgents/com.sp500-analyser.docker.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.sp500-analyser.docker</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>/Users/YOUR_USERNAME/Desktop/studyrepos/tradingproject/sp500_analyser/scripts/docker-compose-up-when-ready.sh</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>WatchPaths</key>
+  <array>
+    <string>/Users/YOUR_USERNAME/.docker/run/docker.sock</string>
+  </array>
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+  <key>StandardOutPath</key>
+  <string>/tmp/sp500-analyser-docker-launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/sp500-analyser-docker-launchd.err</string>
+</dict>
+</plist>

@@ -18,3 +18,6 @@ OUTPUT_DIR = os.path.join(os.path.dirname(PROJECT_DIR), "sp500_output")
 POLYGON_DELAY = 0.2
 # Finviz pagination delay
 FINVIZ_DELAY = 0.5
+
+# When true, main.py writes .cowork_pipeline_ready.json after a successful run (for local Cursor agent hooks).
+WRITE_COWORK_READY = os.getenv("SP500_WRITE_COWORK_READY", "").lower() in ("1", "true", "yes")
