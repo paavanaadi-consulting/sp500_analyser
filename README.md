@@ -27,7 +27,8 @@ python main.py --skip-finviz
 
 ## Output Files
 
-All outputs go to `output/`:
+By default, outputs go to a sibling folder outside this repo: `../sp500_output/`.
+You can override this with `--output-dir`.
 
 | File | Description |
 |------|-------------|
