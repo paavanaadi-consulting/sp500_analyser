@@ -20,31 +20,33 @@ COLUMN_ALIASES = {
     "PEG": ["PEG", "peg"],
     "EPS (ttm)": ["EPS (ttm)", "EPS", "eps_ttm"],
     "EPS next Y": ["EPS next Y", "EPS Next Y", "eps_next_y"],
-    "ROE": ["ROE", "roe"],
+    "EPS next Y": ["EPS next Y", "EPS Next Y", "eps_next_y", "EPS Growth Next Year"],
+    "ROE": ["ROE", "roe", "Return on Equity"],
+    "ROA": ["ROA", "roa", "Return on Assets"],
     "Profit Margin": ["Profit Margin", "profit_margin"],
-    "Debt/Eq": ["Debt/Eq", "debt_eq", "Debt/Equity"],
-    "RSI (14)": ["RSI (14)", "RSI", "rsi"],
-    "SMA20": ["SMA20", "sma20", "SMA 20"],
-    "SMA50": ["SMA50", "sma50", "SMA 50"],
-    "SMA200": ["SMA200", "sma200", "SMA 200"],
-    "EMA20": ["EMA20", "ema20", "EMA 20"],
-    "EMA50": ["EMA50", "ema50", "EMA 50"],
-    "EMA200": ["EMA200", "ema200", "EMA 200"],
+    "Debt/Eq": ["Debt/Eq", "debt_eq", "Debt/Equity", "Total Debt/Equity"],
+    "RSI (14)": ["RSI (14)", "RSI", "rsi", "Relative Strength Index (14)"],
+    "SMA20": ["SMA20", "sma20", "SMA 20", "20-Day Simple Moving Average"],
+    "SMA50": ["SMA50", "sma50", "SMA 50", "50-Day Simple Moving Average"],
+    "SMA200": ["SMA200", "sma200", "SMA 200", "200-Day Simple Moving Average"],
+    "EMA20": ["EMA20", "ema20", "EMA 20", "20-Day Exponential Moving Average"],
+    "EMA50": ["EMA50", "ema50", "EMA 50", "50-Day Exponential Moving Average"],
+    "EMA200": ["EMA200", "ema200", "EMA 200", "200-Day Exponential Moving Average"],
     "Beta": ["Beta", "beta"],
-    "ATR": ["ATR", "atr"],
-    "Volatility": ["Volatility", "volatility", "Volatility W"],
+    "ATR": ["ATR", "atr", "Average True Range"],
+    "Volatility": ["Volatility", "volatility", "Volatility W", "Volatility (Week)"],
     "Rel Volume": ["Rel Volume", "Relative Volume", "rel_volume"],
-    "Perf Week": ["Perf Week", "perf_week", "Perf W"],
-    "Perf Month": ["Perf Month", "perf_month", "Perf M"],
-    "Perf Quarter": ["Perf Quarter", "perf_quarter", "Perf Q"],
-    "Perf Half Y": ["Perf Half Y", "perf_half_y", "Perf HY"],
-    "Perf Year": ["Perf Year", "perf_year", "Perf Y"],
-    "Perf YTD": ["Perf YTD", "perf_ytd"],
-    "Recom": ["Recom", "recom", "Recommendation"],
+    "Perf Week": ["Perf Week", "perf_week", "Perf W", "Performance (Week)"],
+    "Perf Month": ["Perf Month", "perf_month", "Perf M", "Performance (Month)"],
+    "Perf Quarter": ["Perf Quarter", "perf_quarter", "Perf Q", "Performance (Quarter)"],
+    "Perf Half Y": ["Perf Half Y", "perf_half_y", "Perf HY", "Performance (Half Year)"],
+    "Perf Year": ["Perf Year", "perf_year", "Perf Y", "Performance (Year)"],
+    "Perf YTD": ["Perf YTD", "perf_ytd", "Performance (YTD)"],
+    "Recom": ["Recom", "recom", "Recommendation", "Analyst Recom"],
     "Target Price": ["Target Price", "target_price"],
     "P/S": ["P/S", "ps"],
     "P/B": ["P/B", "pb"],
-    "P/FCF": ["P/FCF", "p_fcf"],
+    "P/FCF": ["P/FCF", "p_fcf", "P/Free Cash Flow"],
     "Short Float": ["Short Float", "short_float"],
     "Change": ["Change", "change"],
 }
@@ -81,14 +83,21 @@ def parse_number(val: str | None) -> float | None:
 
 
 def compute_ema_proximity(finviz_entry: dict) -> dict:
-    """How close is the current price to EMA20, EMA50, EMA200 (from Finviz)."""
+    """How close is the current price to EMA20/50/200. Falls back to SMA if EMA not available."""
     price = parse_number(fv_get(finviz_entry, "Price"))
     if price is None or price == 0:
         return {}
 
     proximities = {}
-    for ema_key in ["EMA20", "EMA50", "EMA200"]:
+    ema_sma_pairs = [
+        ("EMA20", "SMA20"),
+        ("EMA50", "SMA50"),
+        ("EMA200", "SMA200"),
+    ]
+    for ema_key, sma_key in ema_sma_pairs:
         raw = fv_get(finviz_entry, ema_key)
+        if raw is None:
+            raw = fv_get(finviz_entry, sma_key)
         pct = parse_pct(raw)
         if pct is not None:
             proximities[f"{ema_key}_pct_from_price"] = round(pct, 2)

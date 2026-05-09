@@ -14,7 +14,7 @@ LOOKBACK_DAYS = 10
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(os.path.dirname(PROJECT_DIR), "sp500_output")
 
-# Polygon free tier: 5 calls/min
-POLYGON_DELAY = 12.5
+# Polygon API delay (seconds between requests)
+POLYGON_DELAY = 0.2
 # Finviz pagination delay
 FINVIZ_DELAY = 0.5
