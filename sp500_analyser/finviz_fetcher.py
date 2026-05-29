@@ -18,7 +18,7 @@ import requests
 import pandas as pd
 from tqdm import tqdm
 
-import config
+from . import config
 
 SCREENER_VIEWS = {
     "overview": 111,

@@ -9,7 +9,7 @@ from pathlib import Path
 import requests
 from tqdm import tqdm
 
-import config
+from . import config
 
 
 def fetch_daily_bars(ticker: str, from_date: str, to_date: str) -> dict | None:
@@ -55,12 +55,15 @@ def fetch_daily_bars(ticker: str, from_date: str, to_date: str) -> dict | None:
 
 def fetch_all_tickers(tickers: list[str], days: int = None) -> list[dict]:
     if days is None:
-        days = config.LOOKBACK_DAYS
+        days = max(config.LOOKBACK_DAYS, config.POLYGON_EMA200_LOOKBACK_DAYS)
     to_date = datetime.now().strftime("%Y-%m-%d")
-    from_date = (datetime.now() - timedelta(days=days + 5)).strftime("%Y-%m-%d")
+    from_date = (datetime.now() - timedelta(days=days + 10)).strftime("%Y-%m-%d")
 
     results = []
-    print(f"Fetching Polygon data for {len(tickers)} tickers ({from_date} to {to_date})...")
+    print(
+        f"Fetching Polygon data for {len(tickers)} tickers ({from_date} to {to_date}, "
+        f"~{days}d calendar for EMA{config.POLYGON_EMA200_PERIOD} + {config.LOOKBACK_DAYS}d trend)..."
+    )
 
     for i, ticker in enumerate(tqdm(tickers, desc="Polygon")):
         data = fetch_daily_bars(ticker, from_date, to_date)
@@ -84,7 +87,7 @@ def save_polygon_data(data: list[dict], output_dir: str = None):
 
 
 if __name__ == "__main__":
-    from sp500_tickers import get_sp500_tickers
+    from sp500_analyser.sp500_tickers import get_sp500_tickers
 
     tickers = get_sp500_tickers()[:5]
     data = fetch_all_tickers(tickers)

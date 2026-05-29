@@ -19,11 +19,11 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-import config
-from sp500_tickers import get_sp500_tickers
-from polygon_fetcher import fetch_all_tickers, save_polygon_data
-from finviz_fetcher import fetch_all_finviz, save_finviz_data
-from analyzer import analyze_all, generate_coworker_summary, save_analysis
+from . import config
+from .sp500_tickers import get_sp500_tickers
+from .polygon_fetcher import fetch_all_tickers, save_polygon_data
+from .finviz_fetcher import fetch_all_finviz, save_finviz_data
+from .analyzer import analyze_all, generate_coworker_summary, save_analysis
 
 
 def load_cached(filename: str) -> list[dict]:
@@ -79,11 +79,23 @@ def main():
         tickers = tickers[:args.limit]
         print(f"Limited to first {args.limit} tickers")
 
-    print(f"\n--- Step 1: Polygon Daily Bars (last {config.LOOKBACK_DAYS} days) ---")
+    print(
+        f"\n--- Step 1: Polygon Daily Bars "
+        f"(~{config.POLYGON_EMA200_LOOKBACK_DAYS}d for EMA{config.POLYGON_EMA200_PERIOD}, "
+        f"last {config.LOOKBACK_DAYS}d for trend) ---"
+    )
     if args.skip_polygon:
         print("Skipping Polygon fetch, loading cached data...")
         polygon_data = load_cached("polygon_daily_bars.json")
         print(f"Loaded {len(polygon_data)} tickers from cache")
+        if polygon_data:
+            bar_count = len(polygon_data[0].get("results", []))
+            if bar_count < config.POLYGON_EMA200_PERIOD:
+                print(
+                    f"WARNING: cache has ~{bar_count} bars per ticker; need "
+                    f"{config.POLYGON_EMA200_PERIOD}+ for Polygon EMA200. "
+                    "Re-run without --skip-polygon to refresh."
+                )
     else:
         polygon_data = fetch_all_tickers(tickers)
         save_polygon_data(polygon_data, args.output_dir)
@@ -106,7 +118,18 @@ def main():
     print("PIPELINE COMPLETE")
     print(f"{'=' * 60}")
     print(f"\nTotal stocks analyzed: {summary['metadata']['total_stocks_analyzed']}")
-    print(f"Stocks near EMAs: {summary['executive_summary']['stocks_near_ema']}")
+    ema_meta = summary.get("metadata", {}).get("ema200_computation", {})
+    if ema_meta:
+        print(
+            f"EMA200 from Polygon: {ema_meta.get('tickers_with_polygon_ema200', 0)} tickers "
+            f"(Finviz fallback: {ema_meta.get('tickers_with_finviz_fallback', 0)})"
+        )
+    print(
+        f"Stocks near daily EMA200 "
+        f"({config.EMA200_NEAR_PCT_MIN}%–{config.EMA200_NEAR_PCT_MAX}%): "
+        f"{summary['executive_summary']['stocks_near_ema200_daily']}"
+    )
+    print(f"Stocks near EMAs (all): {summary['executive_summary']['stocks_near_ema']}")
     print(f"Top emerging trends: {summary['executive_summary']['top_emerging_count']}")
 
     print(f"\nOutput files in '{args.output_dir}/':")
@@ -114,6 +137,20 @@ def main():
     print(f"  - finviz_metrics.json       (fundamentals + technicals + EMAs)")
     print(f"  - full_analysis.json        (all stocks with scores)")
     print(f"  - coworker_summary.json     (structured summary for coworker)")
+    print(f"  - stocks_near_ema200_daily.json (price within EMA200 % band)")
+
+    near200 = summary.get("stocks_near_ema200_daily") or []
+    if near200:
+        print(f"\n--- Stocks within {config.EMA200_NEAR_PCT_MIN}%–{config.EMA200_NEAR_PCT_MAX}% of daily EMA200 ({len(near200)}) ---")
+        for s in near200[:25]:
+            dist = s.get("ema200_distance_pct")
+            dist_s = f"{dist:+.2f}%" if dist is not None else "N/A"
+            print(
+                f"  {s['ticker']:6s} | {dist_s:>8s} from EMA200 | "
+                f"{s.get('side_of_ema200', ''):5s} | {s.get('sector', '')[:18]}"
+            )
+        if len(near200) > 25:
+            print(f"  ... and {len(near200) - 25} more (see stocks_near_ema200_daily.json)")
 
     if summary.get("stocks_near_emas"):
         print(f"\n--- Top 10 Stocks Near EMAs ---")

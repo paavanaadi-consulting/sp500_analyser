@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sp500-analyser"
+version = "0.1.0"
+description = "SP500 EMA proximity and trend analysis pipeline"
+requires-python = ">=3.9"
+dependencies = [
+    "requests>=2.31.0",
+    "finvizfinance>=0.14.0",
+    "pandas>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "tqdm>=4.65.0",
+    "lxml>=4.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.0",
+]
+
+[project.scripts]
+sp500-analyser = "sp500_analyser.main:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.setuptools.packages.find]
+include = ["sp500_analyser*"]

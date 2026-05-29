@@ -44,4 +44,4 @@ services:
       ofelia.enabled: "true"
       ofelia.job-exec.daily_sp500.schedule: "0 7 * * 1-5"
       ofelia.job-exec.daily_sp500.container: "sp500_pipeline_jobspec"
-      ofelia.job-exec.daily_sp500.command: "python main.py --output-dir /data"
+      ofelia.job-exec.daily_sp500.command: "python -m sp500_analyser --output-dir /data"

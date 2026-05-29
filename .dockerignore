@@ -10,3 +10,8 @@ output
 data
 *.egg-info
 README.md
+tests/
+.pytest_cache/
+htmlcov/
+.coverage
+pyproject.toml
