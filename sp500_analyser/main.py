@@ -24,6 +24,7 @@ from .sp500_tickers import get_sp500_tickers
 from .polygon_fetcher import fetch_all_tickers, save_polygon_data
 from .finviz_fetcher import fetch_all_finviz, save_finviz_data
 from .analyzer import analyze_all, generate_coworker_summary, save_analysis
+from .daily_alert import run as run_daily_alert
 
 
 def load_cached(filename: str) -> list[dict]:
@@ -163,6 +164,9 @@ def main():
         for s in summary["top_emerging_trends"][:10]:
             ret = s['trend'].get('period_return_pct', 'N/A')
             print(f"  {s['ticker']:6s} | Score: {s['trend_score']:5.1f} | {s['sector']:20s} | Return: {ret}%")
+
+    print(f"\n--- Step 4: Daily EMA200 Alert ---")
+    run_daily_alert(output_dir=args.output_dir)
 
     if config.WRITE_COWORK_READY:
         write_cowork_pipeline_ready(args.output_dir, summary)

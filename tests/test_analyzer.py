@@ -48,27 +48,29 @@ class TestComputeEma:
 class TestIsNearEma200Daily:
     @patch("sp500_analyser.analyzer.config")
     def test_within_band(self, mock_config):
-        mock_config.EMA200_NEAR_PCT_MIN = 2.0
-        mock_config.EMA200_NEAR_PCT_MAX = 3.0
-        assert is_near_ema200_daily(2.5) is True
-        assert is_near_ema200_daily(-2.5) is True
+        mock_config.EMA200_NEAR_PCT_MIN = 0.0
+        mock_config.EMA200_NEAR_PCT_MAX = 10.0
+        assert is_near_ema200_daily(5.0) is True
+        assert is_near_ema200_daily(-7.5) is True
+        assert is_near_ema200_daily(0.5) is True
 
     @patch("sp500_analyser.analyzer.config")
     def test_outside_band(self, mock_config):
-        mock_config.EMA200_NEAR_PCT_MIN = 2.0
-        mock_config.EMA200_NEAR_PCT_MAX = 3.0
-        assert is_near_ema200_daily(5.0) is False
-        assert is_near_ema200_daily(1.0) is False
+        mock_config.EMA200_NEAR_PCT_MIN = 0.0
+        mock_config.EMA200_NEAR_PCT_MAX = 10.0
+        assert is_near_ema200_daily(15.0) is False
+        assert is_near_ema200_daily(-11.0) is False
 
     def test_none_input(self):
         assert is_near_ema200_daily(None) is False
 
     @patch("sp500_analyser.analyzer.config")
     def test_boundary_values(self, mock_config):
-        mock_config.EMA200_NEAR_PCT_MIN = 2.0
-        mock_config.EMA200_NEAR_PCT_MAX = 3.0
-        assert is_near_ema200_daily(2.0) is True
-        assert is_near_ema200_daily(3.0) is True
+        mock_config.EMA200_NEAR_PCT_MIN = 0.0
+        mock_config.EMA200_NEAR_PCT_MAX = 10.0
+        assert is_near_ema200_daily(0.0) is True
+        assert is_near_ema200_daily(10.0) is True
+        assert is_near_ema200_daily(-10.0) is True
 
 
 class TestClassifyEmaPosition:
@@ -98,8 +100,8 @@ class TestClassifyEmaPosition:
 
     @patch("sp500_analyser.analyzer.config")
     def test_near_ema200(self, mock_config):
-        mock_config.EMA200_NEAR_PCT_MIN = 2.0
-        mock_config.EMA200_NEAR_PCT_MAX = 3.0
+        mock_config.EMA200_NEAR_PCT_MIN = 0.0
+        mock_config.EMA200_NEAR_PCT_MAX = 10.0
         result = classify_ema_position({
             "EMA20_pct_from_price": 5.0,
             "EMA50_pct_from_price": 5.0,
@@ -126,15 +128,15 @@ class TestClassifyEmaPosition:
 class TestScoreEmergingTrend:
     @patch("sp500_analyser.analyzer.config")
     def test_baseline_score(self, mock_config):
-        mock_config.EMA200_NEAR_PCT_MIN = 2.0
-        mock_config.EMA200_NEAR_PCT_MAX = 3.0
+        mock_config.EMA200_NEAR_PCT_MIN = 0.0
+        mock_config.EMA200_NEAR_PCT_MAX = 10.0
         score = score_emerging_trend({}, {}, {})
         assert score == 50.0
 
     @patch("sp500_analyser.analyzer.config")
     def test_high_score_bullish_setup(self, mock_config):
-        mock_config.EMA200_NEAR_PCT_MIN = 2.0
-        mock_config.EMA200_NEAR_PCT_MAX = 3.0
+        mock_config.EMA200_NEAR_PCT_MIN = 0.0
+        mock_config.EMA200_NEAR_PCT_MAX = 10.0
         ema_data = {
             "EMA20_pct_from_price": 1.0,
             "EMA50_pct_from_price": 2.0,
@@ -151,8 +153,8 @@ class TestScoreEmergingTrend:
 
     @patch("sp500_analyser.analyzer.config")
     def test_low_score_bearish_setup(self, mock_config):
-        mock_config.EMA200_NEAR_PCT_MIN = 2.0
-        mock_config.EMA200_NEAR_PCT_MAX = 3.0
+        mock_config.EMA200_NEAR_PCT_MIN = 0.0
+        mock_config.EMA200_NEAR_PCT_MAX = 10.0
         ema_data = {"EMA20_pct_from_price": -10.0}
         trend_data = {
             "period_return_pct": -8.0,
@@ -165,8 +167,8 @@ class TestScoreEmergingTrend:
 
     @patch("sp500_analyser.analyzer.config")
     def test_score_clamped_to_0_100(self, mock_config):
-        mock_config.EMA200_NEAR_PCT_MIN = 2.0
-        mock_config.EMA200_NEAR_PCT_MAX = 3.0
+        mock_config.EMA200_NEAR_PCT_MIN = 0.0
+        mock_config.EMA200_NEAR_PCT_MAX = 10.0
         score = score_emerging_trend(
             {"EMA20_pct_from_price": -100},
             {"period_return_pct": -50, "consecutive_up_days": 0},
@@ -176,8 +178,8 @@ class TestScoreEmergingTrend:
 
     @patch("sp500_analyser.analyzer.config")
     def test_rsi_oversold_bonus(self, mock_config):
-        mock_config.EMA200_NEAR_PCT_MIN = 2.0
-        mock_config.EMA200_NEAR_PCT_MAX = 3.0
+        mock_config.EMA200_NEAR_PCT_MIN = 0.0
+        mock_config.EMA200_NEAR_PCT_MAX = 10.0
         base_score = score_emerging_trend({}, {}, {})
         rsi30_score = score_emerging_trend({}, {}, {"RSI (14)": "35"})
         assert rsi30_score > base_score
@@ -278,8 +280,8 @@ class TestGenerateCoworkerSummary:
     @patch("sp500_analyser.analyzer.config")
     def test_summary_structure(self, mock_config):
         mock_config.LOOKBACK_DAYS = 10
-        mock_config.EMA200_NEAR_PCT_MIN = 2.0
-        mock_config.EMA200_NEAR_PCT_MAX = 3.0
+        mock_config.EMA200_NEAR_PCT_MIN = 0.0
+        mock_config.EMA200_NEAR_PCT_MAX = 10.0
         mock_config.POLYGON_EMA200_PERIOD = 200
         mock_config.POLYGON_EMA200_LOOKBACK_DAYS = 320
 
@@ -318,8 +320,8 @@ class TestAnalyzeAll:
         mock_config.POLYGON_EMA200_PERIOD = 200
         mock_config.POLYGON_EMA200_LOOKBACK_DAYS = 320
         mock_config.LOOKBACK_DAYS = 10
-        mock_config.EMA200_NEAR_PCT_MIN = 2.0
-        mock_config.EMA200_NEAR_PCT_MAX = 3.0
+        mock_config.EMA200_NEAR_PCT_MIN = 0.0
+        mock_config.EMA200_NEAR_PCT_MAX = 10.0
 
         finviz = [{"ticker": "AAPL", "Price": "185", "RSI (14)": "55"}]
         polygon = [
@@ -348,8 +350,8 @@ class TestAnalyzeAll:
         mock_config.POLYGON_EMA200_PERIOD = 200
         mock_config.POLYGON_EMA200_LOOKBACK_DAYS = 320
         mock_config.LOOKBACK_DAYS = 10
-        mock_config.EMA200_NEAR_PCT_MIN = 2.0
-        mock_config.EMA200_NEAR_PCT_MAX = 3.0
+        mock_config.EMA200_NEAR_PCT_MIN = 0.0
+        mock_config.EMA200_NEAR_PCT_MAX = 10.0
 
         finviz = [{"ticker": "AAPL", "Price": "185"}]
         polygon = [{"ticker": "MSFT", "results": []}]
