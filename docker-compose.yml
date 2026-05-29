@@ -26,6 +26,20 @@ services:
     environment:
       TZ: America/New_York
 
+  # Runs the EMA200 daily alert once on startup using cached pipeline output.
+  daily-alert-on-start:
+    container_name: sp500_daily_alert_startup
+    build: .
+    image: sp500-analyser:latest
+    restart: "no"
+    command: ["python", "-c", "from sp500_analyser.daily_alert import run; run(output_dir='/data', alerts_dir='/alertslog')"]
+    volumes:
+      - ${SP500_HOST_DATA_DIR:-../sp500_output}:/data
+      - ${SP500_ALERTS_DIR:-../alertslog}:/alertslog
+    depends_on:
+      pipeline-jobspec:
+        condition: service_started
+
   # Holds Ofelia labels; stays up so job-exec runs python inside this container (same bind mount as host).
   pipeline-jobspec:
     container_name: sp500_pipeline_jobspec
@@ -44,4 +58,4 @@ services:
       ofelia.enabled: "true"
       ofelia.job-exec.daily_sp500.schedule: "0 7 * * 1-5"
       ofelia.job-exec.daily_sp500.container: "sp500_pipeline_jobspec"
-      ofelia.job-exec.daily_sp500.command: "python main.py --output-dir /data"
+      ofelia.job-exec.daily_sp500.command: "python -m sp500_analyser --output-dir /data"

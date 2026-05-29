@@ -6,3 +6,8 @@ data/
 *.egg-info/
 .venv/
 venv/
+.pytest_cache/
+htmlcov/
+.coverage
+dist/
+build/

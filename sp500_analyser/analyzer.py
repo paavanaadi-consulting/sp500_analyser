@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import config
+from . import config
 
 COLUMN_ALIASES = {
     "Company": ["Company", "company"],
@@ -32,6 +32,11 @@ COLUMN_ALIASES = {
     "EMA20": ["EMA20", "ema20", "EMA 20", "20-Day Exponential Moving Average"],
     "EMA50": ["EMA50", "ema50", "EMA 50", "50-Day Exponential Moving Average"],
     "EMA200": ["EMA200", "ema200", "EMA 200", "200-Day Exponential Moving Average"],
+    "200-Day SMA (Relative)": [
+        "200-Day SMA (Relative)",
+        "SMA200 (Relative)",
+        "200-Day Simple Moving Average (Relative)",
+    ],
     "Beta": ["Beta", "beta"],
     "ATR": ["ATR", "atr", "Average True Range"],
     "Volatility": ["Volatility", "volatility", "Volatility W", "Volatility (Week)"],
@@ -82,6 +87,112 @@ def parse_number(val: str | None) -> float | None:
         return None
 
 
+def compute_ema(closes: list[float], period: int) -> float | None:
+    """Standard daily EMA: seed with SMA of first `period` closes, then exponential smoothing."""
+    if len(closes) < period:
+        return None
+    multiplier = 2.0 / (period + 1)
+    ema = sum(closes[:period]) / period
+    for close in closes[period:]:
+        ema = (close - ema) * multiplier + ema
+    return round(ema, 4)
+
+
+def ema200_from_polygon(polygon_entry: dict | None) -> dict | None:
+    """Compute daily EMA200 and price distance from Polygon adjusted daily closes."""
+    if not polygon_entry:
+        return None
+    bars = polygon_entry.get("results", [])
+    period = config.POLYGON_EMA200_PERIOD
+    if len(bars) < period:
+        return None
+
+    closes = [float(b["close"]) for b in bars]
+    ema200 = compute_ema(closes, period)
+    if ema200 is None or ema200 == 0:
+        return None
+
+    last_close = closes[-1]
+    distance_pct = round(((last_close - ema200) / ema200) * 100, 2)
+    return {
+        "ema200": ema200,
+        "last_close": round(last_close, 4),
+        "last_date": bars[-1].get("date"),
+        "distance_pct": distance_pct,
+        "abs_distance_pct": round(abs(distance_pct), 2),
+        "bars_used": len(closes),
+        "source": "polygon",
+    }
+
+
+def apply_polygon_ema200(ema_data: dict, polygon_entry: dict | None) -> dict | None:
+    """Prefer Polygon-computed EMA200; returns the metrics dict when applied."""
+    polygon_ema = ema200_from_polygon(polygon_entry)
+    if not polygon_ema:
+        if ema_data.get("EMA200_pct_from_price") is not None:
+            ema_data["EMA200_source"] = "finviz"
+        return None
+
+    ema_data["EMA200_pct_from_price"] = polygon_ema["distance_pct"]
+    ema_data["EMA200_abs_distance_pct"] = polygon_ema["abs_distance_pct"]
+    ema_data["EMA200_value"] = polygon_ema["ema200"]
+    ema_data["EMA200_last_close"] = polygon_ema["last_close"]
+    ema_data["EMA200_last_date"] = polygon_ema["last_date"]
+    ema_data["EMA200_bars_used"] = polygon_ema["bars_used"]
+    ema_data["EMA200_source"] = "polygon"
+    return polygon_ema
+
+
+def ema200_distance_pct(finviz_entry: dict) -> float | None:
+    """
+    Signed % distance of price from daily EMA200 (or 200-day MA relative from Finviz).
+    Positive = price above EMA200; negative = price below.
+    """
+    price = parse_number(fv_get(finviz_entry, "Price"))
+    if price is None or price == 0:
+        return None
+
+    # Finviz relative columns: already "% from MA" (price vs moving average)
+    for key in (
+        "EMA200",
+        "200-Day Exponential Moving Average",
+        "200-Day SMA (Relative)",
+        "SMA200",
+    ):
+        raw = fv_get(finviz_entry, key)
+        if raw is None:
+            continue
+        pct = parse_pct(raw)
+        if pct is None:
+            continue
+        # Relative Finviz fields are small %; absolute MA levels are near price magnitude
+        if abs(pct) <= 50 or "%" in str(raw):
+            return round(pct, 2)
+        if pct > 0:
+            return round(((price - pct) / pct) * 100, 2)
+
+    # Scan any column Finviz may label differently on export
+    for key, val in finviz_entry.items():
+        if val is None or key == "ticker":
+            continue
+        kl = str(key).lower()
+        if "200" not in kl or not any(x in kl for x in ("ema", "sma", "moving", "relative")):
+            continue
+        pct = parse_pct(val)
+        if pct is not None and abs(pct) <= 50:
+            return round(pct, 2)
+
+    return None
+
+
+def is_near_ema200_daily(distance_pct: float | None) -> bool:
+    """True when |distance from daily EMA200| is within configured min/max % band."""
+    if distance_pct is None:
+        return False
+    adist = abs(distance_pct)
+    return config.EMA200_NEAR_PCT_MIN <= adist <= config.EMA200_NEAR_PCT_MAX
+
+
 def compute_ema_proximity(finviz_entry: dict) -> dict:
     """How close is the current price to EMA20/50/200. Falls back to SMA if EMA not available."""
     price = parse_number(fv_get(finviz_entry, "Price"))
@@ -92,17 +203,33 @@ def compute_ema_proximity(finviz_entry: dict) -> dict:
     ema_sma_pairs = [
         ("EMA20", "SMA20"),
         ("EMA50", "SMA50"),
-        ("EMA200", "SMA200"),
     ]
     for ema_key, sma_key in ema_sma_pairs:
         raw = fv_get(finviz_entry, ema_key)
         if raw is None:
             raw = fv_get(finviz_entry, sma_key)
         pct = parse_pct(raw)
-        if pct is not None:
+        if pct is not None and abs(pct) <= 50:
             proximities[f"{ema_key}_pct_from_price"] = round(pct, 2)
 
+    ema200_dist = ema200_distance_pct(finviz_entry)
+    if ema200_dist is not None:
+        proximities["EMA200_pct_from_price"] = ema200_dist
+        proximities["EMA200_abs_distance_pct"] = round(abs(ema200_dist), 2)
+
     return proximities
+
+
+def polygon_entry_for_trend(polygon_entry: dict | None) -> dict | None:
+    """Use only the recent LOOKBACK_DAYS bars for short-term trend metrics."""
+    if not polygon_entry:
+        return None
+    bars = polygon_entry.get("results", [])
+    if not bars:
+        return None
+    if len(bars) > config.LOOKBACK_DAYS:
+        bars = bars[-config.LOOKBACK_DAYS :]
+    return {"ticker": polygon_entry.get("ticker"), "results": bars}
 
 
 def compute_price_trend(polygon_entry: dict) -> dict:
@@ -173,7 +300,9 @@ def score_emerging_trend(ema_data: dict, trend_data: dict, finviz_data: dict) ->
 
     ema200_pct = ema_data.get("EMA200_pct_from_price")
     if ema200_pct is not None:
-        if ema200_pct > 0:
+        if is_near_ema200_daily(ema200_pct):
+            score += 12
+        elif ema200_pct > 0:
             score += 5
 
     ret = trend_data.get("period_return_pct", 0)
@@ -214,7 +343,7 @@ def classify_ema_position(ema_data: dict) -> str:
 
     near_ema20 = ema20 is not None and abs(ema20) <= 2
     near_ema50 = ema50 is not None and abs(ema50) <= 2
-    near_ema200 = ema200 is not None and abs(ema200) <= 3
+    near_ema200 = is_near_ema200_daily(ema200)
 
     above_all = all(
         v is not None and v > 0
@@ -225,7 +354,7 @@ def classify_ema_position(ema_data: dict) -> str:
     if near_ema20 and near_ema50:
         return "converging_near_ema20_ema50"
     if near_ema200:
-        return "testing_ema200_support"
+        return "near_ema200_daily"
     if near_ema20:
         return "near_ema20"
     if near_ema50:
@@ -247,20 +376,31 @@ def analyze_all(polygon_data: list[dict], finviz_data: list[dict]) -> list[dict]
         pg = polygon_map.get(ticker, {})
 
         ema_data = compute_ema_proximity(fv)
-        trend_data = compute_price_trend(pg) if pg else {}
+        polygon_ema200 = apply_polygon_ema200(ema_data, pg)
+        ema200_dist = ema_data.get("EMA200_pct_from_price")
+        near_ema200 = is_near_ema200_daily(ema200_dist)
+        trend_data = compute_price_trend(polygon_entry_for_trend(pg) or {}) if pg else {}
         trend_score = score_emerging_trend(ema_data, trend_data, fv)
         ema_position = classify_ema_position(ema_data)
+
+        price = parse_number(fv_get(fv, "Price"))
+        if polygon_ema200:
+            price = polygon_ema200["last_close"]
 
         entry = {
             "ticker": ticker,
             "company": fv_get(fv, "Company", ""),
             "sector": fv_get(fv, "Sector", ""),
             "industry": fv_get(fv, "Industry", ""),
-            "price": parse_number(fv_get(fv, "Price")),
+            "price": price,
             "market_cap": fv_get(fv, "Market Cap", ""),
 
             "ema_position": ema_position,
             "ema_proximity": ema_data,
+            "near_ema200_daily": near_ema200,
+            "ema200_distance_pct": ema200_dist,
+            "ema200_source": ema_data.get("EMA200_source"),
+            "ema200_polygon": polygon_ema200,
 
             "trend": trend_data,
 
@@ -282,7 +422,11 @@ def analyze_all(polygon_data: list[dict], finviz_data: list[dict]) -> list[dict]
                 "sma200": fv_get(fv, "SMA200"),
                 "ema20": fv_get(fv, "EMA20"),
                 "ema50": fv_get(fv, "EMA50"),
-                "ema200": fv_get(fv, "EMA200"),
+                "ema200": (
+                    ema_data.get("EMA200_value")
+                    if ema_data.get("EMA200_source") == "polygon"
+                    else fv_get(fv, "EMA200")
+                ),
                 "beta": fv_get(fv, "Beta"),
                 "atr": fv_get(fv, "ATR"),
                 "volatility": fv_get(fv, "Volatility"),
@@ -314,11 +458,26 @@ def analyze_all(polygon_data: list[dict], finviz_data: list[dict]) -> list[dict]
     return results
 
 
+def filter_near_ema200_daily(analyzed: list[dict]) -> list[dict]:
+    """All stocks with daily price within configured % band of EMA200."""
+    hits = [s for s in analyzed if s.get("near_ema200_daily")]
+    hits.sort(
+        key=lambda x: x.get("ema_proximity", {}).get("EMA200_abs_distance_pct", 999),
+    )
+    return hits
+
+
 def generate_coworker_summary(analyzed: list[dict]) -> dict:
     """Create a structured summary optimized for a coworker agent to consume."""
 
+    near_ema200_daily = filter_near_ema200_daily(analyzed)
+    ema200_polygon_count = sum(1 for s in analyzed if s.get("ema200_source") == "polygon")
+    ema200_finviz_count = sum(
+        1 for s in analyzed if s.get("ema200_source") == "finviz" and s.get("ema200_distance_pct") is not None
+    )
+
     near_ema = [s for s in analyzed if s["ema_position"] in (
-        "near_ema20", "near_ema50", "converging_near_ema20_ema50", "testing_ema200_support"
+        "near_ema20", "near_ema50", "converging_near_ema20_ema50", "near_ema200_daily"
     )]
 
     top_emerging = [s for s in analyzed if s["emerging_trend_score"] >= 70]
@@ -347,16 +506,55 @@ def generate_coworker_summary(analyzed: list[dict]) -> dict:
             "lookback_days": config.LOOKBACK_DAYS,
             "generated_at": __import__("datetime").datetime.now().isoformat(),
             "data_sources": ["Polygon.io (OHLCV daily bars)", "Finviz (fundamentals + technicals + EMA)"],
+            "ema200_near_band_pct": {
+                "min": config.EMA200_NEAR_PCT_MIN,
+                "max": config.EMA200_NEAR_PCT_MAX,
+                "description": (
+                    f"Price within {config.EMA200_NEAR_PCT_MIN}%–{config.EMA200_NEAR_PCT_MAX}% "
+                    "of daily EMA200 (absolute distance)."
+                ),
+            },
+            "ema200_computation": {
+                "primary": "polygon_daily_closes",
+                "period": config.POLYGON_EMA200_PERIOD,
+                "polygon_lookback_calendar_days": config.POLYGON_EMA200_LOOKBACK_DAYS,
+                "tickers_with_polygon_ema200": ema200_polygon_count,
+                "tickers_with_finviz_fallback": ema200_finviz_count,
+            },
         },
         "executive_summary": {
             "stocks_near_ema": len(near_ema),
+            "stocks_near_ema200_daily": len(near_ema200_daily),
             "top_emerging_count": len(top_emerging),
             "description": (
-                f"Out of {len(analyzed)} SP500 stocks, {len(near_ema)} are near key EMAs "
-                f"and {len(top_emerging)} show strong emerging trend signals (score >= 70). "
-                "Stocks near EMAs may be at inflection points — worth deeper analysis."
+                f"Out of {len(analyzed)} SP500 stocks, {len(near_ema200_daily)} are within "
+                f"{config.EMA200_NEAR_PCT_MIN}%–{config.EMA200_NEAR_PCT_MAX}% of daily EMA200, "
+                f"{len(near_ema)} are near key EMAs overall, and {len(top_emerging)} show strong "
+                "emerging trend signals (score >= 70)."
             ),
         },
+        "stocks_near_ema200_daily": [
+            {
+                "ticker": s["ticker"],
+                "company": s["company"],
+                "sector": s["sector"],
+                "price": s["price"],
+                "ema200": s["technicals"].get("ema200") or s["technicals"].get("sma200"),
+                "ema200_source": s.get("ema200_source"),
+                "ema200_last_date": s.get("ema_proximity", {}).get("EMA200_last_date"),
+                "ema200_distance_pct": s.get("ema200_distance_pct"),
+                "ema200_abs_distance_pct": s.get("ema_proximity", {}).get("EMA200_abs_distance_pct"),
+                "side_of_ema200": (
+                    "above" if (s.get("ema200_distance_pct") or 0) > 0
+                    else "below" if (s.get("ema200_distance_pct") or 0) < 0
+                    else "at"
+                ),
+                "trend_score": s["emerging_trend_score"],
+                "rsi": s["technicals"]["rsi_14"],
+                "period_return": s["trend"].get("period_return_pct"),
+            }
+            for s in near_ema200_daily
+        ],
         "stocks_near_emas": [
             {
                 "ticker": s["ticker"],
@@ -420,5 +618,15 @@ def save_analysis(analyzed: list[dict], summary: dict, output_dir: str = None):
     with open(summary_path, "w") as f:
         json.dump(summary, f, indent=2)
     print(f"Saved coworker summary to {summary_path}")
+
+    ema200_path = Path(output_dir) / "stocks_near_ema200_daily.json"
+    ema200_payload = {
+        "metadata": summary.get("metadata", {}).get("ema200_near_band_pct", {}),
+        "count": len(summary.get("stocks_near_ema200_daily", [])),
+        "stocks": summary.get("stocks_near_ema200_daily", []),
+    }
+    with open(ema200_path, "w") as f:
+        json.dump(ema200_payload, f, indent=2)
+    print(f"Saved {ema200_payload['count']} EMA200-near stocks to {ema200_path}")
 
     return full_path, summary_path
